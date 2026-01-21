@@ -1,539 +1,333 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MediaPipe + Arduino USB Serial - Hand Tracking</title>
+<title>EDUINO AI</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
 <style>
-body {
-  margin: 0;
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  font-family: 'Arial', sans-serif;
+body{
+  margin:0;
+  background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+  font-family:Segoe UI,sans-serif;
+  color:rgb(255, 0, 0);
+  overflow:hidden;
+}
+header{
+  height:50px;
+  background:#fffc42;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
+}
+.main{
+  display:flex;
+  height:calc(100vh - 50px);
+}
+.left{
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
+}
+video,canvas{
+  width:1024px;
+  height:650px;
+  object-fit:cover;
+  border-radius:16px;
+}
+canvas{position:absolute}
+.overlay{
+  position:absolute;
+  width:1024px;
+  height:650px;
+  background:#000000aa;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  border-radius:16px;
+  z-index:10;
 }
 
-.main-wrapper {
-  display: flex;
-  gap: 15px;
-  padding: 15px;
-  max-width: 1400px;
-  width: 100%;
+/* SIDEBAR */
+.sidebar{
+  width:360px;
+  background:#000000cc;
+  padding:15px;
+  overflow-y:auto;
+  transition:transform 0.3s ease;
+}
+.sidebar.closed{
+  transform:translateX(360px);
 }
 
-.container {
-  position: relative;
-  width: 800px;
-  height: 600px;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+/* TOGGLE BUTTON */
+#menuToggle{
+  position:absolute;
+  right:360px;
+  top:50%;
+  transform:translateY(-50%);
+  width:26px;
+  height:80px;
+  background:#00eaff;
+  border-radius:10px 0 0 10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  color:#000;
+  font-weight:bold;
+  transition:right 0.3s;
+  z-index:20;
+}
+.sidebar.closed + #menuToggle{
+  right:0;
 }
 
-video, canvas {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+/* UI */
+.card{
+  background:#ffffff12;
+  padding:12px;
+  border-radius:12px;
+  margin-bottom:12px;
 }
-
-#info {
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 30px;
-  font-size: 18px;
-  border-radius: 25px;
-  background: #f59e0b;
-  color: white;
-  font-weight: bold;
-  z-index: 10;
+.card h3{color:#00eaff;margin:0 0 8px}
+input{
+  width:100%;
+  padding:7px;
+  margin-bottom:6px;
+  border-radius:6px;
+  border:none;
 }
-
-.tracking { background: #22c55e !important; }
-.loading { background: #f59e0b !important; }
-.no-person { background: #ef4444 !important; }
-
-#hands-status {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 15px;
-  z-index: 10;
+button{
+  width:100%;
+  padding:10px;
+  background:#00eaff;
+  border:none;
+  border-radius:8px;
+  font-size:16px;
+  cursor:pointer;
 }
-
-.hand-label {
-  padding: 10px 20px;
-  border-radius: 8px;
-  background: #6b7280;
-  color: white;
-  font-weight: bold;
-  font-size: 14px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-}
-
-.hand-label.on { background: #22c55e; }
-.hand-label.off { background: #ef4444; }
-
-/* Right Panel - Control */
-.control-panel {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-  width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.panel-title {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 10px;
-  border-bottom: 3px solid #3b82f6;
-  padding-bottom: 10px;
-}
-
-.serial-section {
-  background: #f3f4f6;
-  padding: 12px;
-  border-radius: 8px;
-}
-
-.serial-label {
-  font-size: 12px;
-  color: #666;
-  font-weight: bold;
-  margin-bottom: 8px;
-}
-
-.button-group {
-  display: flex;
-  gap: 8px;
-}
-
-button {
-  flex: 1;
-  padding: 10px;
-  border: none;
-  border-radius: 6px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s;
-  font-size: 12px;
-}
-
-.btn-connect {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn-connect:hover {
-  background: #2563eb;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
-}
-
-.btn-connect:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-disconnect {
-  background: #ef4444;
-  color: white;
-}
-
-.btn-disconnect:hover {
-  background: #dc2626;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
-}
-
-.connection-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-  background: white;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #666;
-}
-
-.status-indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ef4444;
-}
-
-.status-indicator.connected {
-  background: #22c55e;
-}
-
-.data-log {
-  background: #1f2937;
-  color: #10b981;
-  padding: 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-family: 'Courier New', monospace;
-  max-height: 120px;
-  overflow-y: auto;
-  border: 1px solid #374151;
-}
-
-.data-log-title {
-  font-weight: bold;
-  margin-bottom: 6px;
-  color: #60a5fa;
-}
-
-.data-item {
-  margin: 2px 0;
-  color: #10b981;
-}
-
-.sent-data {
-  color: #fbbf24;
-}
-
-.status-info {
-  background: #f0f9ff;
-  padding: 10px;
-  border-radius: 6px;
-  border-left: 4px solid #3b82f6;
-  font-size: 12px;
-  color: #1e40af;
-}
-
-.info-item {
-  margin: 5px 0;
-}
-
-.info-label {
-  font-weight: bold;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f0f0f0;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #3b82f6;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #2563eb;
-}
-
-.data-log::-webkit-scrollbar-track {
-  background: #374151;
-}
-
-.data-log::-webkit-scrollbar-thumb {
-  background: #10b981;
-}
+.status{color:#0f0}
+#gestureLabel{color:#ff0;margin-top:6px}
 </style>
 </head>
 
 <body>
 
-<div class="main-wrapper">
-  <!-- Left: Video Container -->
-  <div class="container">
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
-    <div id="info">LOADING...</div>
-    <div id="hands-status">
-      <div class="hand-label off" id="left-hand">LEFT: OFF</div>
-      <div class="hand-label off" id="right-hand">RIGHT: OFF</div>
-    </div>
-  </div>
+<header>EDUINO AI Full Body TRACKING</header>
 
-  <!-- Right: Control Panel -->
-  <div class="control-panel">
-    <div class="panel-title">🔌 USB Arduino Control</div>
-    
-    <!-- Serial Connection -->
-    <div class="serial-section">
-      <div class="serial-label">Serial Connection</div>
-      <div class="button-group">
-        <button class="btn-connect" id="connectBtn" onclick="connectSerial()">CONNECT</button>
-        <button class="btn-disconnect" id="disconnectBtn" onclick="disconnectSerial()" disabled>DISCONNECT</button>
-      </div>
-      <div class="connection-status" id="connectionStatus" style="margin-top: 10px;">
-        <span class="status-indicator"></span>
-        <span id="statusText">Not Connected</span>
-      </div>
-    </div>
+<div class="main">
 
-    <!-- Status Info -->
-    <div class="status-info">
-      <div class="info-item">
-        <span class="info-label">LEFT HAND:</span> <span id="status-left">OFF</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">RIGHT HAND:</span> <span id="status-right">OFF</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Baud Rate:</span> 9600
-      </div>
-    </div>
+<div class="left">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div class="overlay" id="loading">Loading model please wait…</div>
+  <div class="overlay" id="noperson" style="display:none">No person detected</div>
+</div>
 
-    <!-- Data Log -->
-    <div>
-      <div class="data-log" id="dataLog">
-        <div class="data-log-title">📡 Data Log</div>
-        <div class="data-item">Waiting for connection...</div>
-      </div>
-    </div>
-  </div>
+<div class="sidebar" id="sidebar">
+
+<div class="card">
+  <button onclick="connectArduino()">🔌 Connect Arduino</button>
+  <div id="usbStatus" class="status">Not connected</div>
+</div>
+
+<div class="card">
+<h3>🖐 Hands</h3>
+<input id="rhUp" placeholder="Right Hand Up value">
+<input id="rhDown" placeholder="Right Hand Down value">
+<input id="lhUp" placeholder="Left Hand Up value">
+<input id="lhDown" placeholder="Left Hand Down value">
+<input id="bothUp" placeholder="Both Hands Up value">
+<input id="bothDown" placeholder="Both Hands Down value">
+</div>
+
+<div class="card">
+<h3>✋ Fingers (Right Hand)</h3>
+<input id="thumbUp" placeholder="Thumb Up value">
+<input id="thumbDown" placeholder="Thumb Down value">
+<input id="indexUp" placeholder="Index Up value">
+<input id="indexDown" placeholder="Index Down value">
+<input id="middleUp" placeholder="Middle Up value">
+<input id="middleDown" placeholder="Middle Down value">
+<input id="ringUp" placeholder="Ring Up value">
+<input id="ringDown" placeholder="Ring Down value">
+<input id="pinkyUp" placeholder="Pinky Up value">
+<input id="pinkyDown" placeholder="Pinky Down value">
+</div>
+
+<div class="card">
+<h3>✋ Fingers (Left Hand)</h3>
+<input id="lThumbUp" placeholder="Left Thumb Up value">
+<input id="lThumbDown" placeholder="Left Thumb Down value">
+<input id="lIndexUp" placeholder="Left Index Up value">
+<input id="lIndexDown" placeholder="Left Index Down value">
+<input id="lMiddleUp" placeholder="Left Middle Up value">
+<input id="lMiddleDown" placeholder="Left Middle Down value">
+<input id="lRingUp" placeholder="Left Ring Up value">
+<input id="lRingDown" placeholder="Left Ring Down value">
+<input id="lPinkyUp" placeholder="Left Pinky Up value">
+<input id="lPinkyDown" placeholder="Left Pinky Down value">
+</div>
+
+<div class="card">
+<h3>😀 Face</h3>
+<input id="mouthOpen" placeholder="Mouth Open value">
+<input id="mouthClose" placeholder="Mouth Close value">
+<input id="eyesOpen" placeholder="Eyes Open value">
+<input id="eyesClose" placeholder="Eyes Close value">
+</div>
+
+<div class="card">
+<button id="voiceBtn">Enable Voice</button>
+<b>Live Gesture:</b>
+<div id="gestureLabel">---</div>
+</div>
+
+</div>
+
+<div id="menuToggle" onclick="toggleMenu()">❮</div>
+
 </div>
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const info = document.getElementById("info");
-const leftHandLabel = document.getElementById("left-hand");
-const rightHandLabel = document.getElementById("right-hand");
-const dataLog = document.getElementById("dataLog");
+const sidebar=document.getElementById("sidebar");
+const toggleBtn=document.getElementById("menuToggle");
 
-canvas.width = 800;
-canvas.height = 600;
+function toggleMenu(){
+  sidebar.classList.toggle("closed");
+  toggleBtn.textContent = sidebar.classList.contains("closed") ? "❯" : "❮";
+}
 
-// Serial Port Variables
-let port = null;
-let reader = null;
-let previousLeftHandUp = null;
-let previousRightHandUp = null;
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+canvas.width=1024;
+canvas.height=650;
 
-// Connect to Serial Port
-async function connectSerial() {
-  try {
-    port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 9600 });
-    
-    document.getElementById("connectBtn").disabled = true;
-    document.getElementById("disconnectBtn").disabled = false;
-    
-    const indicator = document.querySelector(".status-indicator");
-    indicator.classList.add("connected");
-    document.getElementById("statusText").textContent = "Connected ✓";
-    
-    addLog("Connected to Arduino!", "#10b981");
-    
-  } catch (error) {
-    addLog("Connection failed: " + error.message, "#ef4444");
-    console.error("Connection error:", error);
+let port,writer,lastSent="";
+let modelReady=false;
+let voiceEnabled=false;
+const synth = window.speechSynthesis;
+let lastSpoken="";
+
+document.getElementById("voiceBtn").onclick=()=>{
+  voiceEnabled = !voiceEnabled;
+  document.getElementById("voiceBtn").innerText = voiceEnabled ? "Disable Voice" : "Enable Voice";
+};
+
+function speak(text){
+  if(voiceEnabled && text!==lastSpoken){
+    synth.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    synth.speak(utter);
+    lastSpoken=text;
   }
 }
 
-// Disconnect from Serial Port
-async function disconnectSerial() {
-  try {
-    if (port) {
-      await port.close();
-      port = null;
-    }
-    
-    document.getElementById("connectBtn").disabled = false;
-    document.getElementById("disconnectBtn").disabled = true;
-    
-    const indicator = document.querySelector(".status-indicator");
-    indicator.classList.remove("connected");
-    document.getElementById("statusText").textContent = "Not Connected";
-    
-    addLog("Disconnected from Arduino", "#ef4444");
-    
-  } catch (error) {
-    addLog("Disconnection error: " + error.message, "#ef4444");
-    console.error("Disconnection error:", error);
+function v(id){return document.getElementById(id).value.trim();}
+
+async function connectArduino(){
+  port=await navigator.serial.requestPort();
+  await port.open({baudRate:9600});
+  writer=port.writable.getWriter();
+  usbStatus.innerText="Connected";
+}
+
+function send(val){
+  if(writer && val && val!==lastSent){
+    writer.write(new TextEncoder().encode(val+"\n"));
+    lastSent=val;
   }
 }
 
-// Send data to Arduino
-async function sendToArduino(data) {
-  if (!port) return;
-  
-  try {
-    const writer = port.writable.getWriter();
-    await writer.write(new Uint8Array([data]));
-    writer.releaseLock();
-    
-    let message = "";
-    switch(data) {
-      case 1: message = "LEFT HAND UP"; break;
-      case 2: message = "LEFT HAND DOWN"; break;
-      case 3: message = "RIGHT HAND UP"; break;
-      case 4: message = "RIGHT HAND DOWN"; break;
-    }
-    
-    addLog(`📤 Sent: ${data} (${message})`, "#fbbf24");
-  } catch (error) {
-    addLog("Send error: " + error.message, "#ef4444");
-    console.error("Send error:", error);
-  }
-}
+function fingerUp(lm,t,p){return lm[t].y < lm[p].y;}
 
-// Add log entry
-function addLog(message, color = "#10b981") {
-  const timestamp = new Date().toLocaleTimeString();
-  const logEntry = document.createElement("div");
-  logEntry.className = "data-item";
-  logEntry.style.color = color;
-  logEntry.textContent = `[${timestamp}] ${message}`;
-  dataLog.appendChild(logEntry);
-  dataLog.scrollTop = dataLog.scrollHeight;
-  
-  // Keep only last 20 entries
-  const items = dataLog.querySelectorAll(".data-item");
-  if (items.length > 20) {
-    items[0].remove();
-  }
-}
-
-// Initialize MediaPipe
-const holistic = new Holistic({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`
+const holistic=new Holistic({
+  locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`
 });
 
 holistic.setOptions({
-  modelComplexity: 1,
-  smoothLandmarks: true,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.5
+  modelComplexity:1,
+  smoothLandmarks:true,
+  minDetectionConfidence:0.6,
+  minTrackingConfidence:0.6
 });
 
-holistic.onResults(results => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+holistic.onResults(r=>{
+  if(!modelReady){loading.style.display="none";modelReady=true;}
 
-  if (results.poseLandmarks) {
-    info.textContent = "TRACKING";
-    info.classList.add("tracking");
-    info.classList.remove("no-person");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(r.image,0,0,canvas.width,canvas.height);
 
-    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
-      color: "#00ffcc", lineWidth: 4
-    });
-    drawLandmarks(ctx, results.poseLandmarks, {
-      color: "#ffcc00", lineWidth: 2
-    });
-  } else {
-    info.textContent = "NO PERSON";
-    info.classList.remove("tracking");
-    info.classList.add("no-person");
+  let detected=false;
+  let gestures=[];
+
+  if(r.poseLandmarks){
+    detected=true;
+    drawConnectors(ctx,r.poseLandmarks,POSE_CONNECTIONS,{color:"#ff0000"});
+
+    const head=r.poseLandmarks[0].y;
+    const lh=r.poseLandmarks[15].y;
+    const rh=r.poseLandmarks[16].y;
+
+    if(rh<head){send(v("rhUp"));gestures.push("Right hand up");}else{send(v("rhDown"));gestures.push("Right hand down");}
+    if(lh<head){send(v("lhUp"));gestures.push("Left hand up");}else{send(v("lhDown"));gestures.push("Left hand down");}
+    if(lh<head && rh<head){send(v("bothUp"));gestures.push("Both hands up");}
+    if(lh>head && rh>head){send(v("bothDown"));gestures.push("Both hands down");}
   }
 
-  if (results.faceLandmarks) {
-    drawConnectors(ctx, results.faceLandmarks, FACEMESH_TESSELATION, {
-      color: "#60a5fa", lineWidth: 1
-    });
+  if(r.rightHandLandmarks){
+    const lm=r.rightHandLandmarks;
+    const f=[fingerUp(lm,4,3),fingerUp(lm,8,6),fingerUp(lm,12,10),fingerUp(lm,16,14),fingerUp(lm,20,18)];
+    f[0]?send(v("thumbUp")):send(v("thumbDown"));f[0]?gestures.push("Right thumb up"):gestures.push("Right thumb down");
+    f[1]?send(v("indexUp")):send(v("indexDown"));f[1]?gestures.push("Right index up"):gestures.push("Right index down");
+    f[2]?send(v("middleUp")):send(v("middleDown"));f[2]?gestures.push("Right middle up"):gestures.push("Right middle down");
+    f[3]?send(v("ringUp")):send(v("ringDown"));f[3]?gestures.push("Right ring up"):gestures.push("Right ring down");
+    f[4]?send(v("pinkyUp")):send(v("pinkyDown"));f[4]?gestures.push("Right pinky up"):gestures.push("Right pinky down");
+    drawConnectors(ctx,lm,HAND_CONNECTIONS,{color:"#00ff00"});
   }
 
-  // LEFT HAND Detection
-  if (results.leftHandLandmarks && results.leftHandLandmarks.length > 0) {
-    const leftWrist = results.leftHandLandmarks[0];
-    const leftMidFinger = results.leftHandLandmarks[9];
-    const isLeftHandUp = leftMidFinger.y < leftWrist.y;
-    
-    leftHandLabel.textContent = isLeftHandUp ? "LEFT: ON" : "LEFT: OFF";
-    leftHandLabel.classList.toggle("on", isLeftHandUp);
-    leftHandLabel.classList.toggle("off", !isLeftHandUp);
-    document.getElementById("status-left").textContent = isLeftHandUp ? "ON ✓" : "OFF";
-    
-    // Send data when state changes
-    if (previousLeftHandUp !== isLeftHandUp) {
-      if (isLeftHandUp) {
-        sendToArduino(1); // 1 = LEFT HAND UP
-      } else {
-        sendToArduino(2); // 2 = LEFT HAND DOWN
-      }
-      previousLeftHandUp = isLeftHandUp;
-    }
-    
-    drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS, {
-      color: "#22c55e"
-    });
-  } else {
-    leftHandLabel.textContent = "LEFT: OFF";
-    leftHandLabel.classList.remove("on");
-    leftHandLabel.classList.add("off");
-    document.getElementById("status-left").textContent = "OFF";
-    
-    if (previousLeftHandUp !== false) {
-      sendToArduino(2); // 2 = LEFT HAND DOWN
-      previousLeftHandUp = false;
-    }
+  if(r.leftHandLandmarks){
+    const lm=r.leftHandLandmarks;
+    const f=[fingerUp(lm,4,3),fingerUp(lm,8,6),fingerUp(lm,12,10),fingerUp(lm,16,14),fingerUp(lm,20,18)];
+    f[0]?send(v("lThumbUp")):send(v("lThumbDown"));f[0]?gestures.push("Left thumb up"):gestures.push("Left thumb down");
+    f[1]?send(v("lIndexUp")):send(v("lIndexDown"));f[1]?gestures.push("Left index up"):gestures.push("Left index down");
+    f[2]?send(v("lMiddleUp")):send(v("lMiddleDown"));f[2]?gestures.push("Left middle up"):gestures.push("Left middle down");
+    f[3]?send(v("lRingUp")):send(v("lRingDown"));f[3]?gestures.push("Left ring up"):gestures.push("Left ring down");
+    f[4]?send(v("lPinkyUp")):send(v("lPinkyDown"));f[4]?gestures.push("Left pinky up"):gestures.push("Left pinky down");
+    drawConnectors(ctx,lm,HAND_CONNECTIONS,{color:"#ff00ff"});
   }
 
-  // RIGHT HAND Detection
-  if (results.rightHandLandmarks && results.rightHandLandmarks.length > 0) {
-    const rightWrist = results.rightHandLandmarks[0];
-    const rightMidFinger = results.rightHandLandmarks[9];
-    const isRightHandUp = rightMidFinger.y < rightWrist.y;
-    
-    rightHandLabel.textContent = isRightHandUp ? "RIGHT: ON" : "RIGHT: OFF";
-    rightHandLabel.classList.toggle("on", isRightHandUp);
-    rightHandLabel.classList.toggle("off", !isRightHandUp);
-    document.getElementById("status-right").textContent = isRightHandUp ? "ON ✓" : "OFF";
-    
-    // Send data when state changes
-    if (previousRightHandUp !== isRightHandUp) {
-      if (isRightHandUp) {
-        sendToArduino(3); // 3 = RIGHT HAND UP
-      } else {
-        sendToArduino(4); // 4 = RIGHT HAND DOWN
-      }
-      previousRightHandUp = isRightHandUp;
-    }
-    
-    drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS, {
-      color: "#f97316"
-    });
-  } else {
-    rightHandLabel.textContent = "RIGHT: OFF";
-    rightHandLabel.classList.remove("on");
-    rightHandLabel.classList.add("off");
-    document.getElementById("status-right").textContent = "OFF";
-    
-    if (previousRightHandUp !== false) {
-      sendToArduino(4); // 4 = RIGHT HAND DOWN
-      previousRightHandUp = false;
-    }
+  if(r.faceLandmarks){
+    drawConnectors(ctx,r.faceLandmarks,FACEMESH_TESSELATION,{color:"#888"});
+    Math.abs(r.faceLandmarks[13].y-r.faceLandmarks[14].y)>0.03
+      ? (send(v("mouthOpen")),gestures.push("Mouth open"))
+      : (send(v("mouthClose")),gestures.push("Mouth close"));
+    Math.abs(r.faceLandmarks[159].y-r.faceLandmarks[145].y)<0.005
+      ? (send(v("eyesClose")),gestures.push("Eyes closed"))
+      : (send(v("eyesOpen")),gestures.push("Eyes open"));
   }
+
+  noperson.style.display=detected?"none":"flex";
+
+  const gestureText = gestures.join(", ");
+  gestureLabel.innerText = gestureText || "---";
+  speak(gestureText);
 });
 
-const camera = new Camera(video, {
-  onFrame: async () => {
-    await holistic.send({ image: video });
-  },
-  width: 800,
-  height: 600
+const cam=new Camera(video,{
+  onFrame:async()=>{await holistic.send({image:video});},
+  width:1280,height:720
 });
-
-camera.start();
-addLog("MediaPipe initialized", "#60a5fa");
+cam.start();
 </script>
 
 </body>
